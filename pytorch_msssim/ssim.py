@@ -1,4 +1,4 @@
-# Copyright 2020 by Gongfan Fang, Zhejiang University.
+# Copyright 2021 by Gongfan Fang, Zhejiang University.
 # All rights reserved.
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -45,7 +45,7 @@ def gaussian_filter(input: Tensor, win: Tensor) -> Tensor:
     out = input
     for i, s in enumerate(input.shape[2:]):
         if s >= win.shape[-1]:
-            out = conv(out, weight=win.transpose(2 + i, -1), stride=1, padding=0, groups=C)
+            out = conv(out, weight=win.transpose(2 + i, -1), stride=1, padding="same", groups=C)
         else:
             warnings.warn(
                 f"Skipping Gaussian Smoothing at dimension 2+{i} for input: {input.shape} and win size: {win.shape[-1]}"
@@ -60,7 +60,8 @@ def _ssim(
     data_range: float,
     win: Tensor,
     size_average: bool = True,
-    K: Union[Tuple[float, float], List[float]] = (0.01, 0.03)
+    K: Union[Tuple[float, float], List[float]] = (0.01, 0.03),
+    return_map: bool = False,
 ) -> Tuple[Tensor, Tensor]:
     r""" Calculate ssim index for X and Y
 
@@ -97,6 +98,9 @@ def _ssim(
     cs_map = (2 * sigma12 + C2) / (sigma1_sq + sigma2_sq + C2)  # set alpha=beta=gamma=1
     ssim_map = ((2 * mu1_mu2 + C1) / (mu1_sq + mu2_sq + C1)) * cs_map
 
+    if return_map:
+        return ssim_map, cs_map
+    
     ssim_per_channel = torch.flatten(ssim_map, 2).mean(-1)
     cs = torch.flatten(cs_map, 2).mean(-1)
     return ssim_per_channel, cs
@@ -112,6 +116,7 @@ def ssim(
     win: Optional[Tensor] = None,
     K: Union[Tuple[float, float], List[float]] = (0.01, 0.03),
     nonnegative_ssim: bool = False,
+    return_map: bool = False,
 ) -> Tensor:
     r""" interface of ssim
     Args:
@@ -151,9 +156,12 @@ def ssim(
         win = _fspecial_gauss_1d(win_size, win_sigma)
         win = win.repeat([X.shape[1]] + [1] * (len(X.shape) - 1))
 
-    ssim_per_channel, cs = _ssim(X, Y, data_range=data_range, win=win, size_average=False, K=K)
+    ssim_per_channel, cs = _ssim(X, Y, data_range=data_range, win=win, size_average=False, K=K, return_map=return_map)
     if nonnegative_ssim:
         ssim_per_channel = torch.relu(ssim_per_channel)
+    
+    if return_map:
+        return ssim_per_channel, cs
 
     if size_average:
         return ssim_per_channel.mean()
@@ -254,6 +262,7 @@ class SSIM(torch.nn.Module):
         spatial_dims: int = 2,
         K: Union[Tuple[float, float], List[float]] = (0.01, 0.03),
         nonnegative_ssim: bool = False,
+        return_map: bool = False,
     ) -> None:
         r""" class for ssim
         Args:
@@ -273,6 +282,7 @@ class SSIM(torch.nn.Module):
         self.data_range = data_range
         self.K = K
         self.nonnegative_ssim = nonnegative_ssim
+        self.return_map = return_map
 
     def forward(self, X: Tensor, Y: Tensor) -> Tensor:
         return ssim(
@@ -283,8 +293,9 @@ class SSIM(torch.nn.Module):
             win=self.win,
             K=self.K,
             nonnegative_ssim=self.nonnegative_ssim,
+            return_map=self.return_map,
         )
-
+        
 
 class MS_SSIM(torch.nn.Module):
     def __init__(
