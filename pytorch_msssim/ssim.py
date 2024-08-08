@@ -219,11 +219,11 @@ def ms_ssim(
 
     smaller_side = min(X.shape[-2:])
     assert smaller_side > (win_size - 1) * (
-        2 ** 4
-    ), "Image size should be larger than %d due to the 4 downsamplings in ms-ssim" % ((win_size - 1) * (2 ** 4))
+        2 ** 2
+    ), "Image size should be larger than %d due to the 4 downsamplings in ms-ssim" % ((win_size - 1) * (2 ** 2))
 
     if weights is None:
-        weights = [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]
+        weights = [0.33, 0.33, 0.334]
     weights_tensor = X.new_tensor(weights)
 
     if win is None:
